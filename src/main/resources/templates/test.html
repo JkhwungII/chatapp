@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>匿名聊天室</title>
+    <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<section class="msger">
+    <header class="msger-header">
+        <div class="msger-header-title">
+            <i class="fas fa-comment-alt"></i> 匿名聊天室
+        </div>
+        <div class="msger-header-options">
+            <span><i class="fas fa-cog"></i></span>
+        </div>
+    </header>
+
+    <dialog id="searchingPairDialog" class="dialog-box">
+        <p class="dialog-text">尋找中...</p>
+    </dialog>
+
+    <dialog id="queueEmptyDialog" class="dialog-box">
+        <form method="dialog">
+            <p class="dialog-text">沒人要聊天 :(</p>
+            <div class="dialog-buttons">
+                <button id="pairAgainBtn" class="dialog-btn dialog-yes" value="ok">再找一個</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="toPairDialog" class="dialog-box">
+        <form method="dialog">
+            <p class="dialog-text">找人聊天嗎?</p>
+            <div class="dialog-buttons">
+                <button id="pairingBtn" class="dialog-btn dialog-yes" value="ok">開始找</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="leaveDialog" class="dialog-box">
+        <form method="dialog">
+            <p class="dialog-text">確定要離開嗎?</p>
+            <div class="dialog-buttons">
+                <button id="leaveBtn" class="dialog-btn dialog-yes" value="yes">Yes</button>
+                <button id="cancelLeaveBtn" class="dialog-btn dialog-no" value="no">No</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div id="toast" class="toast">聊天已結束</div>
+
+    <!-- Dialog 1: One line of text, one button -->
+    <dialog id="singleButtonDialog" class="dialog-box">
+        <form method="dialog">
+            <p class="dialog-text">Chat session has ended.</p>
+            <div class="dialog-buttons">
+                <button class="dialog-btn dialog-yes" value="ok">OK</button>
+            </div>
+        </form>
+    </dialog>
+    
+    <!-- Dialog 2: One line of text, two buttons -->
+    <dialog id="doubleButtonDialog" class="dialog-box">
+        <form method="dialog">
+            <p class="dialog-text">Would you like to continue?</p>
+            <div class="dialog-buttons">
+                <button class="dialog-btn dialog-yes" value="yes">Yes</button>
+                <button class="dialog-btn dialog-no" value="no">No</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!--聊天 block-->
+    
+    <div id="chatBox" class="msger-chat">
+        
+    </div>
+    <!--聊天 block-->
+
+    <div class="msger-inputarea">
+        <input type="text" class="msger-input" id="msg" placeholder="說些什麼吧～">
+        <button type="button" id="send" class="msger-send-btn">發送訊息</button>
+        <button type="button" id="showLeaveBtn" class="msger-send-btn">離開</button>
+    </div>
+</section>
+<script src="js/main.js"></script>
+</body>
+</html>

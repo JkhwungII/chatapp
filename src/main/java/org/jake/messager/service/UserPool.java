@@ -1,5 +1,6 @@
 package org.jake.messager.service;
 
+import jakarta.annotation.Resource;
 import org.apache.commons.collections4.BidiMap;
 import org.apache.commons.collections4.bidimap.DualHashBidiMap;
 import org.jake.messager.MessagerApplication;
@@ -8,6 +9,9 @@ import org.jake.messager.chatuser.ChatUserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.ListOperations;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,40 +19,35 @@ import java.util.*;
 
 @Service
 public class UserPool {
-    BidiMap<String,String> paired_users = new DualHashBidiMap<>();
-    List<String> pending_users = Collections.synchronizedList(new ArrayList<>());
-    Map<String,String> user_to_SessionID = Collections.synchronizedMap(new HashMap<>());
     @Autowired
     ChatUserRepository chatUserRepository;
+    @Autowired
+    StringRedisTemplate stringRedisTemplate;
+
 
     private static final Logger logger = LoggerFactory.getLogger(MessagerApplication.class);
-
-    public synchronized void addUserToPending(String UUID){
-        if(!pending_users.contains(UUID)){
-            pending_users.add(UUID);
-        }
+    @Transactional
+    public void addUserToPending(String UUID){
         chatUserRepository.setIsPairing(UUID);
 
     }
 
     @Transactional
-    public synchronized String pollUser(String UUID){
+    public String pollUser(String UUID){
         int polled_index = -1;
         String chosen_user_uuid;
-        logger.info("local pending queue:" + pending_users.toString());
-        logger.info("pending queue fetched from DB" + chatUserRepository.findByPairingTrue());
+        List<ChatUser> pending_queue = chatUserRepository.findByPairingTrue();
 
-        if (paired_users.getKey(UUID) != null) {
-            logger.info("DB fetch first user:" + chatUserRepository.findByID(UUID).getPairedWith());
+        if (chatUserRepository.findByID(UUID).getPairedWith() != null) {
             return getUserPair(UUID);
         }
 
-        if (pending_users.size() >= 2){
-            polled_index = (int)(Math.random() * pending_users.size());
-            chosen_user_uuid = pending_users.get(polled_index);
+        if (pending_queue.size() >= 2){
+            polled_index = (int)(Math.random() * pending_queue.size());
+            chosen_user_uuid = pending_queue.get(polled_index).getID();
             while (chosen_user_uuid.equals(UUID)){
-                polled_index = (int)(Math.random() * pending_users.size());
-                chosen_user_uuid = pending_users.get(polled_index);
+                polled_index = (int)(Math.random() * pending_queue.size());
+                chosen_user_uuid = pending_queue.get(polled_index).getID();
             }
         }
         else
@@ -56,59 +55,64 @@ public class UserPool {
 
         chatUserRepository.setPair(UUID,chosen_user_uuid,true);
         chatUserRepository.setPair(chosen_user_uuid,UUID,false);
-        paired_users.put(UUID, chosen_user_uuid);
+
         return getUserPair(UUID);
     }
 
-    public synchronized String getUserPair(String UUID){
-        String primary = paired_users.getKey(UUID);
-        String secondary = paired_users.get(UUID);
+    public String getUserPair(String UUID){
+
+        boolean hasValue = stringRedisTemplate.opsForHash().hasKey(UUID,"user_pair");
+        if (hasValue)
+            return (String) stringRedisTemplate.opsForHash().get(UUID,"user_pair");
+
         ChatUser c = chatUserRepository.findByID(UUID);
-        if (c.isFirst() && c.getPairedWith() != null){
-            logger.info("DB fetched user pair: " + c.getID() + ";" + c.getPairedWith());
-        } else if (c.getPairedWith() != null) {
-            logger.info("DB fetched user pair: " + c.getPairedWith() + ";" + c.getID());
+        String user_pair;
+
+        assert c != null;
+        if (c.getPairedWith() == null){
+            return null;
         }
 
-        if (primary == null && secondary != null) {
-            return UUID + ";" + secondary;
-        } else if (secondary == null && primary != null){
-            return primary + ";" + UUID;
-        } else
-            return null;
+        if (c.isFirst()){
+            user_pair = c.getID() + ";" + c.getPairedWith();
+        } else {
+            user_pair = c.getPairedWith() + ";" + c.getID();
+        }
+
+        stringRedisTemplate.opsForHash().put(UUID,"user_pair", user_pair);
+        return user_pair;
+
     }
 
-    public synchronized String getPairedUserSessionID(String UUID){
-        String primary = paired_users.getKey(UUID);
-        String secondary = paired_users.get(UUID);
+    public String getPairedUserSessionID(String UUID){
+        boolean hasValue = stringRedisTemplate.opsForHash().hasKey(UUID,"paired_user_session_ID");
+        if (hasValue)
+            return (String) stringRedisTemplate.opsForHash().get(UUID,"paired_user_session_ID");
 
-        logger.info("fetch paired user session ID:  "+ chatUserRepository.findPairedSessionID(UUID));
-        if (primary != null) {
-            return user_to_SessionID.get(primary);
-        } else if (secondary != null) {
-            return user_to_SessionID.get(secondary);
-        } else
-            return null;
+        String paired_user_session_ID = chatUserRepository.findPairedSessionID(UUID);
+        stringRedisTemplate.opsForHash().put(UUID,"paired_user_session_ID", paired_user_session_ID);
+
+        return paired_user_session_ID;
     }
 
     @Transactional
-    public synchronized void deleteUserPair(String UUID){
-        if(paired_users.containsKey(UUID) || paired_users.containsValue(UUID))
-            paired_users.removeValue(UUID);
+    public  void deleteUserPair(String UUID){
         ChatUser c = chatUserRepository.findByID(UUID);
         if (c != null){
+            String toRemove =  c.getPairedWith();
+            stringRedisTemplate.delete(UUID);
+            stringRedisTemplate.delete(toRemove);
             chatUserRepository.removePair(c.getID());
-            chatUserRepository.removePair(c.getPairedWith());
+            chatUserRepository.removePair(toRemove);
+        } else {
+            throw new IllegalArgumentException("ID \""+UUID+"\" cannot be found in DB");
         }
         logger.info("pair deleted");
     }
 
-    public synchronized String getUserSessionID(String UUID){
-        return user_to_SessionID.get(UUID);
-    }
 
-    public synchronized void registerUser(String UUID, String SessionID){
-        user_to_SessionID.put(UUID,SessionID);
+    @Transactional
+    public void registerUser(String UUID, String SessionID){
         if (chatUserRepository.findByID(UUID)==null) {
             ChatUser u = new ChatUser();
             u.setID(UUID);
@@ -117,14 +121,10 @@ public class UserPool {
         } else {
             chatUserRepository.setSessionID(SessionID,UUID);
         }
-        logger.info("session_id added "+user_to_SessionID.get(UUID));
     }
-
+    @Transactional
     public synchronized void leavePendingQueue(String UUID){
-        pending_users.remove(UUID);
         chatUserRepository.unsetIsPairing(UUID);
-        logger.info("local pending queue:" + pending_users.toString());
         logger.info("pending queue fetched from DB" + chatUserRepository.findByPairingTrue());
-        logger.info(pending_users.toString());
     }
 }
