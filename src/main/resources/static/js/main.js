@@ -8,10 +8,7 @@ const queueEmptyDialog = document.getElementById("queueEmptyDialog");
 
 
 
-
-// Trigger the dialogs with buttons
 const showSingleDialogBtn = document.getElementById('showSingleDialog');
-//const showDoubleDialogBtn = document.getElementById('showDoubleDialog');
 const pairingBtn = document.getElementById("pairingBtn");
 const pairAgainBtn = document.getElementById("pairAgainBtn");
 const showLeaveBtn = document.getElementById("showLeaveBtn");
@@ -60,21 +57,6 @@ searchingPairDialog.addEventListener('click', (e) => {
         e.stopPropagation(); 
     }
 });
-
-function toPair(){
-    toPairDialog.showModal()
-    
-}
-
-function waitforParing(){
-    searchingPairDialog.showModal()
-
-}
-
-
-function showQueueEmptyDialog(){
-    queueEmptyDialog.showModal();
-}
 
 const LEFT = "left";
 const RIGHT = "right";
@@ -160,6 +142,21 @@ ws.onmessage = function (event) {
     
 };
 
+
+function toPair(){
+    toPairDialog.showModal()
+
+}
+
+function waitforParing(){
+    searchingPairDialog.showModal()
+
+}
+
+
+function showQueueEmptyDialog(){
+    queueEmptyDialog.showModal();
+}
 
 function handleMessageEvent() {
     if (text.value !== ""){

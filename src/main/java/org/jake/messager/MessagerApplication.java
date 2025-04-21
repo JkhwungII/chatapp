@@ -22,21 +22,4 @@ public class MessagerApplication {
 		SpringApplication.run(MessagerApplication.class, args);
 	}
 
-	/*@Bean
-	CommandLineRunner runner(MessageRepository repository) {
-		return args -> {
-
-			Message m = new Message();
-			m.setUserPair("asdf:asdf");
-			m.setFromUser("asdf");
-			m.setTimeSent(LocalDateTime.now());
-			m.setMessage("bla bla bla");
-			repository.save(m);
-
-
-			List<Message> saved = repository.findByUserPairOrderByTimeSent("asdf:asdf");
-
-			logger.info(saved.get(0).getTimeSent().toString());
-		};
-	}*/
 }
