@@ -6,6 +6,8 @@ import org.apache.commons.collections4.bidimap.DualHashBidiMap;
 import org.jake.messager.MessagerApplication;
 import org.jake.messager.chatuser.ChatUser;
 import org.jake.messager.chatuser.ChatUserRepository;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,13 +18,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class UserPool {
-    @Autowired
+
     ChatUserRepository chatUserRepository;
-    @Autowired
     StringRedisTemplate stringRedisTemplate;
+
+    RedissonClient redisson;
+
+    public UserPool(ChatUserRepository chatUserRepository, StringRedisTemplate stringRedisTemplate, RedissonClient redisson){
+        this.chatUserRepository = chatUserRepository;
+        this.stringRedisTemplate =stringRedisTemplate;
+        this.redisson = redisson;
+    }
 
 
     private static final Logger logger = LoggerFactory.getLogger(MessagerApplication.class);
@@ -34,6 +44,8 @@ public class UserPool {
 
     @Transactional
     public String pollUser(String UUID){
+        RLock pollLock = redisson.getLock("pollLock");
+        pollLock.lock(400, TimeUnit.MILLISECONDS);
         int polled_index = -1;
         String chosen_user_uuid;
         List<ChatUser> pending_queue = chatUserRepository.findByPairingTrue();
@@ -50,11 +62,15 @@ public class UserPool {
                 chosen_user_uuid = pending_queue.get(polled_index).getID();
             }
         }
-        else
+        else{
+            pollLock.unlock();
             return "waiting";
+        }
+
 
         chatUserRepository.setPair(UUID,chosen_user_uuid,true);
         chatUserRepository.setPair(chosen_user_uuid,UUID,false);
+        pollLock.unlock();
 
         return getUserPair(UUID);
     }
@@ -96,7 +112,7 @@ public class UserPool {
     }
 
     @Transactional
-    public  void deleteUserPair(String UUID){
+    public void deleteUserPair(String UUID){
         ChatUser c = chatUserRepository.findByID(UUID);
         if (c != null){
             String toRemove =  c.getPairedWith();
@@ -125,6 +141,5 @@ public class UserPool {
     @Transactional
     public synchronized void leavePendingQueue(String UUID){
         chatUserRepository.unsetIsPairing(UUID);
-        logger.info("pending queue fetched from DB" + chatUserRepository.findByPairingTrue());
     }
 }

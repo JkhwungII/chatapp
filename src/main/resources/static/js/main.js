@@ -63,7 +63,7 @@ const RIGHT = "right";
 
 
 var flag_load_previous_messages = false;
-var url = "ws://" + window.location.host + "/socket";
+var url = "wss://" + window.location.host + "/socket";
 var ws = new WebSocket(url);
 
 ws.addEventListener("error", (event) => {

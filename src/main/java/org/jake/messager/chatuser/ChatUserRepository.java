@@ -3,9 +3,11 @@ package org.jake.messager.chatuser;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+@Repository
 public interface ChatUserRepository extends JpaRepository<ChatUser, String> {
 
     ChatUser findByID(String ID);
@@ -31,6 +33,9 @@ public interface ChatUserRepository extends JpaRepository<ChatUser, String> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE ChatUser u SET u.pairedWith = null WHERE u.ID = ?1")
     void removePair(String ID);
+
+    @Modifying(clearAutomatically = true)
+    void deleteByID(String ID);
 
 
 }

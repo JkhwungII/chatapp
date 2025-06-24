@@ -5,33 +5,41 @@ import org.jake.messager.MessagerApplication;
 import org.jake.messager.message.ClientSideMessage;
 import org.jake.messager.message.Message;
 import org.jake.messager.message.MessageRepository;
+import org.jake.messager.service.RedisPubSubService;
 import org.jake.messager.service.UserPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-
-public  class ChatSessionHandler extends TextWebSocketHandler {
+@Component
+public class ChatSessionHandler extends TextWebSocketHandler {
 
     UserPool userPool;
     MessageRepository messageRepository;
+    RedisPubSubService pubSubService;
+
 
     private static final Logger logger = LoggerFactory.getLogger(MessagerApplication.class);
+    List<WebSocketSession> sessions_pool = new CopyOnWriteArrayList<>();
 
     ObjectMapper objectMapper = new ObjectMapper();
-    public ChatSessionHandler(UserPool userPool, MessageRepository messageRepository){
+    public ChatSessionHandler(UserPool userPool, MessageRepository messageRepository, RedisPubSubService pubSubService){
         this.userPool = userPool;
         this.messageRepository = messageRepository;
+        this.pubSubService = pubSubService;
+        this.pubSubService.setSessions_pool(sessions_pool);
     }
-    List<WebSocketSession> sessions_pool = new CopyOnWriteArrayList<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -43,6 +51,7 @@ public  class ChatSessionHandler extends TextWebSocketHandler {
     @Override
     protected synchronized void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception  {
         String user_ID = (String) session.getAttributes().get("user_ID");
+        boolean is_message_sent = false;
         logger.info("incoming message: "+ message.getPayload());
         if (message.getPayload().equals("#PAIR")) {
             userPool.addUserToPending(user_ID);
@@ -63,8 +72,12 @@ public  class ChatSessionHandler extends TextWebSocketHandler {
                 if (wss.getId().equals(paired_session_ID)){
                     logger.info("User :"+paired_session_ID+" alive and leaving");
                     wss.sendMessage(new TextMessage("#LEAVE_COMPLETE"));
+                    is_message_sent = true;
                     break;
                 }
+            }
+            if (!is_message_sent) {
+                pubSubService.relayMessage(paired_session_ID,"#LEAVE_COMPLETE");
             }
 
             session.sendMessage(new TextMessage("#LEAVE_COMPLETE"));
@@ -82,7 +95,7 @@ public  class ChatSessionHandler extends TextWebSocketHandler {
             });
             session.sendMessage(new TextMessage("@END_OF_MESSAGES"));
         }  else {
-            LocalDateTime now_time = LocalDateTime.now();
+            LocalDateTime now_time = LocalDateTime.now(ZoneId.of("Asia/Taipei"));
             session.sendMessage(
                     new TextMessage(
                             objectMapper.writeValueAsString(
@@ -92,17 +105,18 @@ public  class ChatSessionHandler extends TextWebSocketHandler {
             );
 
             String destination_session_ID = userPool.getPairedUserSessionID(user_ID);
+            String message_sent = objectMapper.writeValueAsString(
+                    new ClientSideMessage(now_time.toString(), message.getPayload(), false)
+            );
             for (WebSocketSession s: sessions_pool) {
                 if(destination_session_ID.equals(s.getId())){
-                    s.sendMessage(
-                            new TextMessage(
-                                    objectMapper.writeValueAsString(
-                                            new ClientSideMessage(now_time.toString(), message.getPayload(), false)
-                                    )
-                            )
-                    );
+                    s.sendMessage(new TextMessage(message_sent));
+                    is_message_sent = true;
                     break;
                 }
+            }
+            if (!is_message_sent) {
+                pubSubService.relayMessage(destination_session_ID,message_sent);
             }
             Message m = new Message();
             m.setUserPair(userPool.getUserPair(user_ID));
@@ -123,43 +137,43 @@ public  class ChatSessionHandler extends TextWebSocketHandler {
         sessions_pool.remove(session);
     }
 
-      Void pairUser(WebSocketSession session, String user_ID) throws Exception {
-        CompletableFuture<String> paired_user = CompletableFuture.supplyAsync(() -> {
-            String pollResult = "waiting";
-            try {
-                int pair_counter = 0;
-                while (pair_counter < 15) {
-                    pollResult = userPool.pollUser(user_ID);
-                    if(pollResult.equals("waiting")) {
-                        Thread.sleep(500);
-                        pair_counter += 1;
-                    }
-                    else
-                        break;
+  Void pairUser(WebSocketSession session, String user_ID) throws Exception {
+    CompletableFuture<String> paired_user = CompletableFuture.supplyAsync(() -> {
+        String pollResult = "waiting";
+        try {
+            int pair_counter = 0;
+            while (pair_counter < 15) {
+                pollResult = userPool.pollUser(user_ID);
+                if(pollResult.equals("waiting")) {
+                    Thread.sleep(500);
+                    pair_counter += 1;
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                else
+                    break;
             }
-            return pollResult;
-        });
-        paired_user.thenAccept((result)->{
-            try {
-                if ("waiting".equals(result) && userPool.getUserPair(user_ID) == null) {
-                    session.sendMessage(new TextMessage("#QUEUE_EMPTY"));
-                    userPool.leavePendingQueue(user_ID);
-                }
-                else if (result != null){
-                    session.sendMessage(new TextMessage("#PAIRED"));
-                    userPool.leavePendingQueue(user_ID);
-                } else {
-                    logger.error("null result when pairing user: "+ user_ID);
-                    userPool.leavePendingQueue(user_ID);
-                }
-                logger.info("paired result :" + result);
-            }catch (Exception e){
-                logger.error(e.toString());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return pollResult;
+    });
+    paired_user.thenAccept((result)->{
+        try {
+            if ("waiting".equals(result) && userPool.getUserPair(user_ID) == null) {
+                session.sendMessage(new TextMessage("#QUEUE_EMPTY"));
+                userPool.leavePendingQueue(user_ID);
             }
-        });
+            else if (result != null){
+                session.sendMessage(new TextMessage("#PAIRED"));
+                userPool.leavePendingQueue(user_ID);
+            } else {
+                logger.error("null result when pairing user: "+ user_ID);
+                userPool.leavePendingQueue(user_ID);
+            }
+            logger.info("paired result :" + result);
+        }catch (Exception e){
+            logger.error(e.toString());
+        }
+    });
 
         return null;
     }

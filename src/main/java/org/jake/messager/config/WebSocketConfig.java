@@ -18,16 +18,27 @@ import java.util.Optional;
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
 
-    public WebSocketConfig(UserPool userPool){ this.userPool = userPool; }
-
     UserPool userPool;
+    ChatSessionHandler chatSessionHandler;
+    ChatSessionHandshakeInterceptor chatSessionHandshakeInterceptor;
+
+    public WebSocketConfig(UserPool userPool,
+                           ChatSessionHandler chatSessionHandler,
+                           ChatSessionHandshakeInterceptor chatSessionHandshakeInterceptor)
+    {
+        this.userPool = userPool;
+        this.chatSessionHandler = chatSessionHandler;
+        this.chatSessionHandshakeInterceptor = chatSessionHandshakeInterceptor;
+    }
+
+
     String Origin = Optional.ofNullable(System.getenv("ORIGIN")).orElse("*");
-    @Autowired
-    MessageRepository messageRepository;
+
+
 
     @Override
     public void registerWebSocketHandlers( WebSocketHandlerRegistry registry){
-        registry.addHandler(new ChatSessionHandler(userPool, messageRepository),"/socket")
+        registry.addHandler(chatSessionHandler,"/socket")
                 .addInterceptors(new ChatSessionHandshakeInterceptor(userPool))
                 .setAllowedOrigins(Origin);
     }

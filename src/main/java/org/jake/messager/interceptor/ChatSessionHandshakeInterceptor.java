@@ -6,15 +6,18 @@ import org.jake.messager.MessagerApplication;
 import org.jake.messager.service.UserPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
 import java.util.Map;
 import java.util.UUID;
 
+@Component
 public class ChatSessionHandshakeInterceptor implements HandshakeInterceptor {
 
     public UserPool userPool;
