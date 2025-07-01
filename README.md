@@ -13,7 +13,7 @@ Our server serves as a proxy for users, relaying messages while hiding users fro
 #### Persistent session
 To implement recoverble chatting session, we store all messages sent and user related data in MySQL database. However, some stored data are utilized more often then others, such as users' ID, thus we incorperated redis to cache these data. 
 #### horizontal scaling
-Finally, to support horizontal scaling, we added distributed lock to pairng to prevent collition in paring and pubsub to propagate messages between server instances when paired user are served by diffrent instances.
+To support horizontal scaling, we added distributed lock(Reddison RLock) to pairng to prevent collition in paring and redis pubsub to propagate messages between server instances when paired user are served by diffrent instances.
 
 
 
